@@ -1,72 +1,10 @@
-#define WFD -3
-#define WFM -2
-#define INMATCH 	-1
-#define IDLE 		0
-#define MYTURN 		1
-#define HISTURN 	2
-#define TIMER 		(struct timeval){60,0}
-#define SIZE 		10
-#define NSHIPS 		10
-#define DIMSHIPS 	31
-#define WATER 		' '
-#define SHIP 		'#'
-#define HITS 		'X'
-#define SUNK 		'^'
-#define HITW 		'~'
-#define CHAT 		'M'
-#define HELP 		'h'
-#define WHO 		'W'
-#define CONNECT 	'C'
-#define DISCONNECT 	'D'
-#define QUIT 		'Q'
-#define ENEMYMAP	'E'
-#define MYMAP		'Y'
-#define HIT 		'H'
-#define SETNAME 	's'
-#define SETMAP 		'm'
-#define ERR 		'e'
-#define DENIED 		'd'
-#define UNKNOWN 	'U'
-#define ACCEPTED 	'A'
-#define BUSY 		'B'
-#define REFUSED 	'R'
-#define REPLY 		'r'
-#define REQUEST 	'q'
-#define NAMEOK 		'N'
-#define NAMENOK		'Z'
-#define STARTMATCH 	'S'
-#define WIN 		'w'
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/select.h>
 
-typedef unsigned short sizetype;
-
-struct message{
-	char *msg;
-	sizetype len;
-	struct message *next;
-};
-
-/*
-	Contiene i dati necessari alla gestione della lista e dei giocatori
-		- int socket, socket TCP utilizzato per le comunicazioni client-server
-		- char* nome, puntatore al nome scelto dal giocatore
-		- struct sockaddr_in address, struttura contenente i dati utilizzati nelle connessioni udp
-		- char state, indica lo stato del giocatore
-		- struct message* messages, puntatore al primo messaggio da inviare
-		- struct message* last_message, puntatore all'ultimo messaggio da inviare
-		- struct player* opponent, puntatore al giocatore con cui sta giocando (NULL se è libero)
-		- struct player* next, puntatore al prossimo giocatore nella lista
-*/
-
-struct player{
-	int socket;
-	char *name;
-	struct sockaddr_in address;
-	char state;
-	struct message *messages;
-	struct message *last_message;
-	struct player *opponent;
-	struct player *next;
-};
+#include "seafight_lib.h"
 
 /*
 	Aggiunge un giocatore in testa alla lista dei giocatori
@@ -75,7 +13,7 @@ struct player{
 			- player *item, puntatore alla struttura rappresentante il giocatore da aggiungere
 */
 
-void addPlayer(struct player **p, struct player* item){
+void addPlayer(struct player **p, struct player* item) {
 	item->next = *p;
 	*p = item;
 }
@@ -89,7 +27,7 @@ void addPlayer(struct player **p, struct player* item){
 			- int, -1 se il nome utente è già in uso, 0 altrimenti
 */
 
-int checkName(struct player *p, char* name){
+int checkName(struct player *p, char* name) {
 	for(; p != NULL; p = p->next)
 		if(p->name != NULL && strcmp(p->name, name) == 0)
 			return -1;
@@ -105,7 +43,7 @@ int checkName(struct player *p, char* name){
 			- int, -1 se il giocatore non esiste, 0 se l'eliminazione e' andata a buon fine
 */
 
-int rmPlayer(struct player **p, struct player* pun){
+int rmPlayer(struct player **p, struct player* pun) {
 	struct player *tmp;
 	if(pun == NULL)
 		return -1;
@@ -117,7 +55,7 @@ int rmPlayer(struct player **p, struct player* pun){
 			return -1;
 		tmp->next = tmp->next->next;
 	}
-	while(pun->messages != NULL){
+	while(pun->messages != NULL) {
 		struct message *mex = pun->messages;
 		pun->messages = mex->next;
 		free(mex->msg);
@@ -137,7 +75,7 @@ int rmPlayer(struct player **p, struct player* pun){
 			- struct player*, puntatore al giocatore con socket sock, NULL se non esiste
 */
 
-struct player* getBySocket(struct player *p, int sock){
+struct player* getBySocket(struct player *p, int sock) {
 	for(; p != NULL; p = p->next)
 		if(p->socket == sock)
 			return p;
@@ -153,7 +91,7 @@ struct player* getBySocket(struct player *p, int sock){
 			- struct player*, puntatore al giocatore di nome name, NULL se non esiste
 */
 
-struct player* getByName(struct player *p, char *nome){
+struct player* getByName(struct player *p, char *nome) {
 	for(; p != NULL; p = p->next)
 		if(strcmp(p->name, nome) == 0)
 			return p;
@@ -170,12 +108,12 @@ struct player* getByName(struct player *p, char *nome){
 			- int, numero dei caratteri che compongono la lista
 */
 
-int getList(struct player *p, char **str){
+int getList(struct player *p, char **str) {
 	struct player *tmp;
 	char *cur;
 	int len = 2;
-	for(tmp = p;tmp != NULL; tmp = tmp->next){
-		if(tmp->name != NULL){
+	for(tmp = p;tmp != NULL; tmp = tmp->next) {
+		if(tmp->name != NULL) {
 			if(tmp->state != IDLE)
 				len += strlen(tmp->name) + 12; //aggiungo (occupato)
 			else
@@ -185,11 +123,11 @@ int getList(struct player *p, char **str){
 	*str = malloc(len);
 	**str = WHO; //il primo carattere e' WHO
 	cur = *str + 1;
-	for(tmp = p; tmp != NULL; tmp = tmp->next){
-		if(tmp->name != NULL){
+	for(tmp = p; tmp != NULL; tmp = tmp->next) {
+		if(tmp->name != NULL) {
 			strcpy(cur, tmp->name);
 			cur += strlen(tmp->name) + 1;
-			if(tmp->state != IDLE){
+			if(tmp->state != IDLE) {
 				strcpy(cur - 1, " (occupato)");
 				cur += 11;
 			}
@@ -204,7 +142,7 @@ int getList(struct player *p, char **str){
 Elimina tutti i caratteri dallo standard input finché non trova \n (pulisco dopo una scanf)
 */
 
-void flush(){
+void flush() {
 	while(getchar()!='\n');
 }
 
@@ -216,18 +154,18 @@ void flush(){
 			- int, numero di caratteri letti (incluso \0)
 */
 
-int readLine(char **buf){
+int readLine(char **buf) {
 	char *p = NULL;
 	unsigned int len = 0, block = 32;
 	*buf = NULL;
 	//leggo blocchi di caratteri
-	for(; ; block <<= 2){
+	for(; ; block <<= 2) {
 		//alloco la memoria per la lettura del nuovo blocco (dim. corrente + dim. blocco))
 		*buf = realloc(*buf, len + block);
 		//leggo un blocco a partire dal byte successivo al'ultimo letto
 		fgets(&((*buf)[len]), block, stdin);
 		//cerco \n, se c'è lo sostituisco con \0 e ho finito
-		if((p = strchr(&((*buf)[len]), '\n')) != NULL){
+		if((p = strchr(&((*buf)[len]), '\n')) != NULL) {
 			*p = '\0';
 			break;
 		}
@@ -246,11 +184,11 @@ int readLine(char **buf){
 			- char, identificatore del comando ricevuto (ERR se il comando non esiste)
 */
 
-char parseCommand(char **cmd){
+char parseCommand(char **cmd) {
 	char *msg;
-	if(**cmd == '!'){
-		if(strncmp(*cmd + 1, "hit ", 4) == 0){
-			if((((*cmd)[5] >= 'a' && (*cmd)[5] <= 'j') || ((*cmd)[5] >= 'A' && (*cmd)[5] <= 'J')) && (*cmd)[6] >= '0' && (*cmd)[6] <= '9' && (*cmd)[7] == '\0'){
+	if(**cmd == '!') {
+		if(strncmp(*cmd + 1, "hit ", 4) == 0) {
+			if((((*cmd)[5] >= 'a' && (*cmd)[5] <= 'j') || ((*cmd)[5] >= 'A' && (*cmd)[5] <= 'J')) && (*cmd)[6] >= '0' && (*cmd)[6] <= '9' && (*cmd)[7] == '\0') {
 				//se e' '!hit ln' è un attacco, porto le coordinate in indici di matrice
 				if((*cmd)[5] >= 'a')
 					(*cmd)[5] -= 'a';
@@ -275,14 +213,14 @@ char parseCommand(char **cmd){
 			return SETMAP;
 		else if(strcmp((*cmd) + 1, "help") == 0)
 			return HELP;
-		else if(strcmp((*cmd) + 1, "who") == 0){ //devo inviare 'w\0'
+		else if(strcmp((*cmd) + 1, "who") == 0) { //devo inviare 'w\0'
 			free(*cmd);
 			*cmd = malloc(2);
 			(*cmd)[0] = WHO;
 			(*cmd)[1] = '\0';
 			return WHO;
 		}
-		else if(strncmp((*cmd) + 1, "connect ", 8) == 0){
+		else if(strncmp((*cmd) + 1, "connect ", 8) == 0) {
 			//se inizia con '!connect ' è una richiesta di connessione
 			char *msg = malloc(strlen(*cmd + 8));
 			msg[0] = CONNECT;
@@ -291,21 +229,21 @@ char parseCommand(char **cmd){
 			*cmd = msg;
 			return CONNECT;
 		}
-		else if(strcmp((*cmd) + 1, "disconnect") == 0){ //devo inviare 'd\0'
+		else if(strcmp((*cmd) + 1, "disconnect") == 0) { //devo inviare 'd\0'
 			free(*cmd);
 			*cmd = malloc(2);
 			(*cmd)[0] = DISCONNECT;
 			(*cmd)[1] = '\0';
 			return DISCONNECT;
 		}
-		else if(strcmp((*cmd) + 1, "quit") == 0){ //devo inviare 'q\0'
+		else if(strcmp((*cmd) + 1, "quit") == 0) { //devo inviare 'q\0'
 			free(*cmd);
 			*cmd = malloc(2);
 			(*cmd)[0] = QUIT;
 			(*cmd)[1] = '\0';
 			return QUIT;
 		}
-		else if(strncmp((*cmd) + 1, "chat ", 5) == 0){
+		else if(strncmp((*cmd) + 1, "chat ", 5) == 0) {
 			char *msg = malloc(strlen(*cmd + 5));
 			msg[0] = CHAT;
 			strcpy(msg + 1, *cmd + 6); //devo inviare 'm<testo>\0'
@@ -323,7 +261,7 @@ char parseCommand(char **cmd){
 			char map[SIZE][SIZE], matrice in cui è salvata la mappa
 */
 
-void printMap(char map[SIZE][SIZE]){
+void printMap(char map[SIZE][SIZE]) {
 	int i, j, k;
 	printf("\n    ");
 	for (i = 0; i < SIZE; i += 1)
@@ -332,14 +270,14 @@ void printMap(char map[SIZE][SIZE]){
 	for (i = 0; i < SIZE; i += 1)
 		printf("====");
 	printf("\b\\\\\n");
-	for(i = 0; i < SIZE; i++){
+	for(i = 0; i < SIZE; i++) {
 		printf("%c ||", 'A' + i);
 		for(j = 0; j < SIZE; j++)
 			if(map[i][j] >= 0 && map[i][j] < NSHIPS)
 				printf(" %c |", map[i][j] + '0');
 			else
 				printf(" %c |", map[i][j]);
-		if(i != SIZE - 1){
+		if(i != SIZE - 1) {
 			printf("|\n  ||");
 			for(k = 0; k < SIZE; k++)
 				printf("---+");
@@ -361,7 +299,7 @@ void printMap(char map[SIZE][SIZE]){
 			char map[SIZE][SIZE], matrice in cui salvare la mappa
 */
 
-void getMap(char map[SIZE][SIZE]){
+void getMap(char map[SIZE][SIZE]) {
 	char x = 0, d = -1, ok =  0, ships[NSHIPS];
 	int i, j, y;
 	ships[0]=6;ships[1]=4;ships[2]=4;ships[3]=3;ships[4]=3;
@@ -389,19 +327,19 @@ void getMap(char map[SIZE][SIZE]){
 				d = 'v';
 			else
 				d = 'o';
-			if( d == 'o' && y + ships[j] > 10){
+			if( d == 'o' && y + ships[j] > 10) {
 				printf("La nave esce dalla mappa, scegliere una collocazione valida\n");
 				ok = 0;
 			}
-			else if( d == 'v' && x + ships[j] > 10){
+			else if( d == 'v' && x + ships[j] > 10) {
 				printf("La nave esce dalla mappa, scegliere una collocazione valida\n");
 				ok = 0;
 			}
 			else{ //la nave è interna alla mappa
 				ok = 1;
-				if(d == 'o'){
+				if(d == 'o') {
 					for(i = 0; i < ships[j]; i++)
-						if(map[(int)x][y+i] != WATER){
+						if(map[(int)x][y+i] != WATER) {
 							ok = 0;
 							printf("La nave si sovrappone con un'altra in %c%d", x + 'A', y + i);
 							printf(", scegliere una collocazione valida\n");
@@ -410,15 +348,15 @@ void getMap(char map[SIZE][SIZE]){
 				}
 				else{
 					for(i = 0; i < ships[j]; i++)
-						if(map[x+i][y] != WATER){
+						if(map[x+i][y] != WATER) {
 							ok = 0;
 							printf("La nave si sovrappone con un'altra in %c%d", x + i + 'A', y);
 							printf(", scegliere una collocazione valida\n");
 							break;
 						}
 				}
-				if(ok == 1){
-					if(d == 'o'){
+				if(ok == 1) {
+					if(d == 'o') {
 						for(i = 0; i < ships[j]; i++)
 							map[(int)x][y+i] = j;
 					}
@@ -444,11 +382,11 @@ void getMap(char map[SIZE][SIZE]){
 			- size se la stringa è stata trasmessa correttamente, -1 altrimenti
 */
 
-int sendObject(int dest, const void* obj, sizetype size, int flags){
+int sendObject(int dest, const void* obj, sizetype size, int flags) {
 	void* msg = malloc(size + sizeof(sizetype));
 	*(sizetype*)msg = size;
 	memcpy(msg + sizeof(sizetype), obj, size);
-	if(send(dest, msg, size + sizeof(sizetype), flags) != size + sizeof(sizetype)){
+	if(send(dest, msg, size + sizeof(sizetype), flags) != size + sizeof(sizetype)) {
 		free(msg);
 		return -1;
 	}
@@ -464,10 +402,10 @@ int sendObject(int dest, const void* obj, sizetype size, int flags){
 			- int, dimensione dell'oggeto ricevuto, -1 se in caso di errore, 0 se il socket è chiuso
 */
 
-sizetype recvObject(int src, void** str){
+sizetype recvObject(int src, void** str) {
 	sizetype size;
 	int ret = recv(src, &size, sizeof(sizetype), 0);
-	if(ret != sizeof(sizetype)){
+	if(ret != sizeof(sizetype)) {
 		if(ret == 0)
 			return 0;
 		else
@@ -475,7 +413,7 @@ sizetype recvObject(int src, void** str){
 	}
 	*str = malloc(size);
 	ret = recv(src, *str, size, 0);
-	if(ret != size){
+	if(ret != size) {
 		free(*str);
 		if(ret == 0)
 			return 0;
@@ -496,7 +434,7 @@ sizetype recvObject(int src, void** str){
 			- size se la stringa è stata trasmessa correttamente, -1 altrimenti
 */
 
-int sendObjectTo(int dest, struct sockaddr_in addr, const void* obj, sizetype size){
+int sendObjectTo(int dest, struct sockaddr_in addr, const void* obj, sizetype size) {
 	if(sendto(dest, &size, sizeof(sizetype), 0, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) != sizeof(sizetype))
 		return -1;
 	if(sendto(dest, obj, size, 0, (struct sockaddr*)&addr, sizeof(struct sockaddr_in)) != size)
@@ -514,11 +452,11 @@ int sendObjectTo(int dest, struct sockaddr_in addr, const void* obj, sizetype si
 			- int, dimensione dell'oggeto ricevuto, -1 se in caso di errore, 0 se il socket è chiuso
 */
 
-sizetype recvObjectFrom(int src, struct sockaddr_in *addr, void** str){
+sizetype recvObjectFrom(int src, struct sockaddr_in *addr, void** str) {
 	sizetype size;
 	socklen_t addrlen = sizeof(struct sockaddr_in);
 	int ret = recvfrom(src, &size, sizeof(sizetype), 0, (struct sockaddr*)addr, &addrlen);
-	if(ret != sizeof(sizetype)){
+	if(ret != sizeof(sizetype)) {
 		if(ret == 0)
 			return 0;
 		else
@@ -526,7 +464,7 @@ sizetype recvObjectFrom(int src, struct sockaddr_in *addr, void** str){
 	}
 	*str = malloc(size);
 	ret = recvfrom(src, *str, size, 0, (struct sockaddr*)addr, &addrlen);
-	if(ret != size){
+	if(ret != size) {
 		free(*str);
 		if(ret == 0)
 			return 0;
@@ -545,14 +483,14 @@ sizetype recvObjectFrom(int src, struct sockaddr_in *addr, void** str){
 			- sizetype size, dimensione del messaggio
 */
 
-void sendMessage(struct player *p, fd_set *set, char *m, sizetype size){
+void sendMessage(struct player *p, fd_set *set, char *m, sizetype size) {
 	struct message *mex = malloc(sizeof(struct message));
 	mex->msg = malloc(size);
 	memcpy(mex->msg, m, size);
 	mex->len = size;
 	mex->next = NULL;
 	FD_SET(p->socket, set);
-	if(p->messages == NULL){
+	if(p->messages == NULL) {
 		p->messages = mex;
 		p->last_message = mex;
 	}

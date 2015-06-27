@@ -5,7 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <netinet/in.h>
-#include "seafight_lib.c"
+#include "seafight_lib.h"
 
 int main(int argc, char* argv[]){
 	int i, listener, fdmax;
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]){
 	printf("Server in ascolto: %s:%s\n\n", argv[1], argv[2]);
 	FD_SET(listener, &masterreadset);
 	fdmax = listener;
-	
+
 	while(1){
 		readset = masterreadset;
 		writeset = masterwriteset;
@@ -288,7 +288,7 @@ int main(int argc, char* argv[]){
 							if((src = getByName(players, mex->msg + 1)) == NULL || src->state == IDLE || src->opponent != dest){
 								//il richiedente non è più in attesa del destinatario
 								if(dest->state == BUSY && dest->opponent == src){
-									//serve nel caso !connect e poi !disconnect prima che la connect 
+									//serve nel caso !connect e poi !disconnect prima che la connect
 									//sia consegnata, il dest resterebbe occupato!
 									dest->state = IDLE;
 									dest->opponent = NULL;

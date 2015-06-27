@@ -8,7 +8,7 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <netinet/in.h>
-#include "seafight_lib.c"
+#include "seafight_lib.h"
 
 extern int errno;
 
